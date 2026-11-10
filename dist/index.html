@@ -50,7 +50,14 @@
   /* Filtros */
   .filtros { display:flex; flex-wrap:wrap; gap:14px 28px; align-items:center; background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin-bottom:28px; }
   .grupo { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
-  .grupo + .grupo { border-left:2px solid var(--line); padding-left:28px; }
+  #f-equipo, #f-estado { width:100%; }
+  .buscador { position:relative; display:flex; align-items:center; }
+  #buscar { font:inherit; font-size:.85rem; min-width:240px; padding:6px 30px 6px 10px; border:1px solid var(--line); border-radius:8px; background:var(--bg, transparent); color:inherit; -webkit-appearance:none; appearance:none; }
+  #buscar::-webkit-search-cancel-button { -webkit-appearance:none; display:none; }
+  #buscar-x { position:absolute; right:4px; width:22px; height:22px; padding:0; border:0; border-radius:50%; background:transparent; color:var(--muted); font-size:1.2rem; line-height:1; cursor:pointer; }
+  #buscar-x:hover, #buscar-x:focus-visible { background:var(--line); color:inherit; }
+  #buscar-x[hidden] { display:none; }
+  @media (max-width:760px) { #f-buscar .buscador { flex:1; } #buscar { flex:1; min-width:0; } }
   .grupo > span { font-size:.75rem; color:var(--muted); font-weight:700; letter-spacing:.06em; margin-right:6px; }
   @media (max-width:760px) {
     .grupo { width:100%; }
@@ -60,7 +67,9 @@
   .chip { border:1px solid var(--line); background:transparent; color:var(--fg); border-radius:999px; padding:5px 12px; font-size:.82rem; cursor:pointer; font-family:inherit; }
   .chip[aria-pressed="true"] { outline:2px solid var(--fg); outline-offset:-1px; font-weight:600; }
   .chip.estado-prog, .chip.estado-bloq, .chip.estado-fin, .chip.estado-pro { border-color:transparent; }
-  #limpiar { margin-left:auto; border:0; background:none; color:var(--muted); cursor:pointer; font-size:.82rem; text-decoration:underline; font-family:inherit; }
+  #limpiar { margin-left:auto; border:0; background:none; color:#d92d3a; cursor:pointer; font-size:.85rem; font-weight:700; text-decoration:underline; font-family:inherit; }
+  #limpiar:hover, #limpiar:focus-visible { color:#b91c28; }
+  @media (prefers-color-scheme: dark) { #limpiar { color:#ff7b84; } #limpiar:hover, #limpiar:focus-visible { color:#ffa3a9; } }
 
   /* Secciones y tarjetas */
   section.equipo { margin-bottom:44px; }
@@ -147,6 +156,7 @@
   <div class="filtros">
     <div class="grupo" id="f-equipo"><span>EQUIPO</span></div>
     <div class="grupo" id="f-estado"><span>ESTADO</span></div>
+    <div class="grupo" id="f-buscar"><span>BUSCAR</span><div class="buscador"><input id="buscar" type="search" placeholder="Título o descripción…" autocomplete="off" aria-label="Buscar tareas por título o descripción"><button id="buscar-x" type="button" aria-label="Borrar búsqueda" hidden>×</button></div></div>
     <button id="limpiar" type="button">Limpiar filtros</button>
   </div>
 
@@ -190,7 +200,8 @@ const urlSegura = u => /^https?:\/\//i.test(u) ? u : '';
 const etiquetaLink = u => /\/wiki\//i.test(u) ? 'Abrir en Confluence' : /\/browse\//i.test(u) ? 'Abrir en Jira' : 'Abrir enlace';
 
 let tareas = [];
-const filtro = { equipo: null, estado: null };
+const filtro = { equipo: null, estado: null, texto: '' };
+const norm = s => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
 function chip(texto, clase, grupo, valor) {
   const b = document.createElement('button');
@@ -215,7 +226,15 @@ function armarFiltros() {
     render();
   }));
   document.getElementById('limpiar').addEventListener('click', () => {
-    filtro.equipo = filtro.estado = null; render();
+    filtro.equipo = filtro.estado = null; filtro.texto = '';
+    document.getElementById('buscar').value = ''; document.getElementById('buscar-x').hidden = true; render();
+  });
+  const inp = document.getElementById('buscar'), x = document.getElementById('buscar-x');
+  inp.addEventListener('input', () => {
+    filtro.texto = norm(inp.value).trim(); x.hidden = !inp.value; render();
+  });
+  x.addEventListener('click', () => {
+    inp.value = ''; filtro.texto = ''; x.hidden = true; render(); inp.focus();
   });
 }
 
@@ -253,7 +272,8 @@ function tarjeta(t) {
 function render() {
   pintarChips();
   const visibles = tareas.filter(t =>
-    (!filtro.equipo || t.equipo === filtro.equipo) && (!filtro.estado || t.estado === filtro.estado));
+    (!filtro.equipo || t.equipo === filtro.equipo) && (!filtro.estado || t.estado === filtro.estado) &&
+    (!filtro.texto || norm(t.titulo).includes(filtro.texto) || norm(t.descripcion).includes(filtro.texto)));
   const orden = Object.fromEntries(ESTADOS.map((s, i) => [s.nombre, i]));
   const html = EQUIPOS.map(e => {
     const ts = visibles.filter(t => t.equipo === e).sort((a, b) => orden[a.estado] - orden[b.estado] || a.id - b.id);
@@ -352,8 +372,8 @@ $('x-pdf').addEventListener('click', () => {
   setTimeout(() => window.print(), 50); // en el diálogo de impresión: "Guardar como PDF"
 });
 
-fetch('data.json', { cache: 'no-store' })
-  .then(r => r.json())
+const DATOS_INCRUSTADOS = {"actualizado":"2026-11-07","tareas":[{"id":1,"autor":"Lucía Fernández","titulo":"Integrar asistente IA en pantalla de soporte","tipo":"Feature","descripcion":"Chat con el asistente de IA dentro de la app iOS, con streaming de respuestas y manejo de errores de red.","equipo":"iOS","link":"https://empresa.atlassian.net/browse/IA-101","estado":"EN PROGRESO","creadoPor":"lucia-fernandez","creadoEn":"2026-10-11","editadoPor":"cumpatomas","editadoEn":"2026-11-05"},{"id":2,"autor":"Martín Gómez","titulo":"Migrar SDK de analítica de prompts","tipo":"Deuda técnica","descripcion":"Actualizar el SDK que registra uso de prompts para cumplir con la nueva política de privacidad.","equipo":"iOS","link":"https://empresa.atlassian.net/browse/IA-102","estado":"PROGRAMADA","creadoPor":"martin-gomez","creadoEn":"2026-10-12"},{"id":3,"autor":"Sofía Ramírez","titulo":"Resúmenes automáticos en notificaciones","tipo":"Feature","descripcion":"Generar resúmenes cortos con IA para las notificaciones push largas.","equipo":"iOS","link":"https://empresa.atlassian.net/wiki/spaces/IA/pages/2001","estado":"FINALIZADA","creadoPor":"sofia-ramirez","creadoEn":"2026-10-13"},{"id":4,"autor":"Diego Torres","titulo":"Modelo on-device para sugerencias","tipo":"Investigación","descripcion":"Evaluar modelo liviano on-device para sugerencias de texto sin enviar datos al servidor.","equipo":"iOS","link":"https://empresa.atlassian.net/wiki/spaces/IA/pages/2002","estado":"BLOQUEADA","creadoPor":"diego-torres","creadoEn":"2026-10-14","editadoPor":"cumpatomas","editadoEn":"2026-11-05"},{"id":5,"autor":"Valentina Cruz","titulo":"Chat con asistente IA en Android","tipo":"Feature","descripcion":"Pantalla de chat en Compose con streaming de tokens y reintentos automáticos.","equipo":"Android","link":"https://empresa.atlassian.net/browse/IA-201","estado":"EN PROGRESO","creadoPor":"valentina-cruz","creadoEn":"2026-10-15"},{"id":6,"autor":"Joaquín Méndez","titulo":"Reducir consumo de batería del módulo IA","tipo":"Performance","descripcion":"Perfilar y optimizar las llamadas en segundo plano del módulo de recomendaciones.","equipo":"Android","link":"https://empresa.atlassian.net/browse/IA-202","estado":"EN PROGRESO","creadoPor":"joaquin-mendez","creadoEn":"2026-10-16"},{"id":7,"autor":"Camila Ortiz","titulo":"Accesibilidad en respuestas del asistente","tipo":"Mejora","descripcion":"Soporte de TalkBack y contraste adecuado en las tarjetas de respuesta generadas.","equipo":"Android","link":"https://empresa.atlassian.net/wiki/spaces/IA/pages/3001","estado":"PROGRAMADA","creadoPor":"camila-ortiz","creadoEn":"2026-10-17"},{"id":8,"autor":"Nicolás Peña","titulo":"Fallback cuando el modelo no responde","tipo":"Bug","descripcion":"La app se queda cargando indefinidamente si el backend de IA excede el timeout.","equipo":"Android","link":"https://empresa.atlassian.net/browse/IA-203","estado":"FINALIZADA","creadoPor":"nicolas-pena","creadoEn":"2026-10-18"},{"id":9,"autor":"Ana Beltrán","titulo":"Gateway unificado de modelos LLM","tipo":"Arquitectura","descripcion":"Servicio que enruta peticiones a distintos proveedores de LLM con límites y métricas de costo.","equipo":"Backend","link":"https://empresa.atlassian.net/browse/IA-301","estado":"EN PROGRESO","creadoPor":"ana-beltran","creadoEn":"2026-10-19","editadoPor":"cumpatomas","editadoEn":"2026-11-05"},{"id":10,"autor":"Ricardo Sosa","titulo":"Caché semántica de respuestas","tipo":"Performance","descripcion":"Reutilizar respuestas de prompts similares usando embeddings para bajar costos y latencia.","equipo":"Backend","link":"https://empresa.atlassian.net/wiki/spaces/IA/pages/4001","estado":"BLOQUEADA","creadoPor":"ricardo-sosa","creadoEn":"2026-10-20"},{"id":11,"autor":"Paula Medina","titulo":"Filtro de datos personales en prompts","tipo":"Seguridad","descripcion":"Detectar y enmascarar PII antes de enviar los prompts a proveedores externos.","equipo":"Backend","link":"https://empresa.atlassian.net/browse/IA-302","estado":"FINALIZADA","creadoPor":"paula-medina","creadoEn":"2026-10-21"},{"id":12,"autor":"Esteban Rojas","titulo":"Pipeline de indexado de documentos","tipo":"Feature","descripcion":"Ingesta de Confluence y Jira a la base vectorial para el asistente interno.","equipo":"Backend","link":"https://empresa.atlassian.net/browse/IA-303","estado":"PROGRAMADA","creadoPor":"esteban-rojas","creadoEn":"2026-10-22"},{"id":13,"autor":"Florencia Vega","titulo":"Suite de evaluación de respuestas del asistente","tipo":"Testing","descripcion":"Conjunto de casos dorados para medir calidad, alucinaciones y tono de las respuestas.","equipo":"QA","link":"https://empresa.atlassian.net/wiki/spaces/IA/pages/5001","estado":"EN PROGRESO","creadoPor":"florencia-vega","creadoEn":"2026-10-23"},{"id":14,"autor":"Gabriel Ibáñez","titulo":"Pruebas de regresión del chat en ambas apps","tipo":"Testing","descripcion":"Automatizar los flujos principales del chat en iOS y Android.","equipo":"QA","link":"https://empresa.atlassian.net/browse/IA-401","estado":"PROGRAMADA","creadoPor":"gabriel-ibanez","creadoEn":"2026-10-24"},{"id":15,"autor":"Marina Lagos","titulo":"Pruebas de carga del gateway LLM","tipo":"Performance","descripcion":"Esperando entorno de staging con cuotas de proveedor para ejecutar las pruebas.","equipo":"QA","link":"https://empresa.atlassian.net/browse/IA-402","estado":"BLOQUEADA","creadoPor":"marina-lagos","creadoEn":"2026-10-25"},{"id":16,"autor":"Juan Pablo Tomas","titulo":"Mejoras Copiloto revisor de PR local y remoto","tipo":"General","descripcion":"Nuevas guías de revisión de PRs con nuevas reglas para la migración de Android a Corrutinas.","equipo":"Android","link":"","estado":"EN PROGRESO","creadoPor":"cumpatomas","creadoEn":"2026-11-07"}]}; // lo reemplaza build.js
+(DATOS_INCRUSTADOS ? Promise.resolve(DATOS_INCRUSTADOS) : fetch('data.json', { cache: 'no-store' }).then(r => r.json()))
   .then(d => {
     tareas = d.tareas;
     document.getElementById('meta').textContent = 'Actualizado: ' + d.actualizado;
